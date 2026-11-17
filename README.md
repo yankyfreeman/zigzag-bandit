@@ -1,11 +1,14 @@
 # Zigzag Bandit
 
-A quick mouse-shooter web game. A bandit runs for the exit in an unpredictable pattern
-(a few steps forward, a few back, forward again). Hit him with paint before he escapes.
+A quick mouse-shooter web game. You look down a western street at sunset; a bandit runs
+away from you toward the town limit, dodging left and right in an unpredictable pattern
+(1 step left, 3 right, 2 left, 7 right...). Hit him with paint before he escapes.
 
 ## Play
 
-Open `index.html` in a browser. No build step, no dependencies.
+Open `index.html` in a browser, or run `node dev-server.js` and open http://localhost:5173.
+No build step, no dependencies (the title font loads from Google Fonts and falls back to a
+system serif when offline).
 
 | Input | Action |
 | --- | --- |
@@ -16,13 +19,17 @@ Open `index.html` in a browser. No build step, no dependencies.
 
 ## Rules
 
-- Each round lasts roughly 10–15 seconds: stop the bandit or he reaches the EXIT.
+- Each round lasts roughly 11–15 seconds: stop the bandit or he reaches the town limit.
+  The further he gets, the smaller the target.
 - 3 lives. An escape costs one and the level restarts.
-- Headshots do double damage and score more. Consecutive hits build a streak multiplier.
+- Headshots do double damage and score more. Consecutive hits build a streak multiplier,
+  and long-distance hits score x1.5.
+- Crates and barrels block shots only while he is behind them.
 - Bonus points for accuracy and for catching him early.
-- 10 levels add speed, cover, multi-hit vests, jumps/slides, stutter-steps, smaller targets
+- 10 levels add speed, cover, multi-hit vests, jumps/ducks, stutter-steps, a head start
   and dust. After level 10 it continues as endless "Overtime".
 
 ## Tuning
 
-Level difficulty is a data table (`LEVELS`) at the top of `game.js`.
+Level difficulty is a data table (`LEVELS`) at the top of `game.js`. The perspective
+constants (`D1`, `CAM`, `HORIZON`) sit just above it.
