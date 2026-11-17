@@ -134,14 +134,14 @@
   let result = null;
   let shake = 0, flashT = 0, recoil = 0;
   const mouse = { x: W / 2, y: H * 0.55, show: false, ax: W / 2, ay: H * 0.55, since: 0 };
-  // Anti-camping: an aim held within STILL_R px for STILL_TIME s goes "cold" and its shots miss.
+  // Anti-camping: once the aim has stayed within STILL_R px for STILL_TIME s, the bandit
+  // silently steers around that spot (see avoidCamp), so waiting for him never pays off.
   const STILL_R = 14, STILL_TIME = 1.5;
   function aimAt(x, y) {
     if (Math.hypot(x - mouse.ax, y - mouse.ay) > STILL_R) { mouse.ax = x; mouse.ay = y; mouse.since = clock; }
     mouse.x = x; mouse.y = y;
   }
   const stillness = () => Math.min(1, (clock - mouse.since) / STILL_TIME);
-  let coldWarned = false;
   const motes = Array.from({ length: 36 }, () => ({ x: rand(0, W), y: rand(120, H), vx: rand(-14, 14), vy: rand(-8, 4), r: rand(0.8, 2.2) }));
 
   // ---------- Static scenery (rendered once to an offscreen canvas) ----------
@@ -457,10 +457,10 @@
     }
 
     let target = 0;
-    if (r.pause > 0) r.pause -= dt;
-    else {
+    if (r.pause > 0) { r.pause -= dt; avoidCamp(r); }
+    if (r.pause <= 0) {
       target = r.segDir * 0.17;
-      r.stepT += dt * r.lv.speed * (r.panic > 0 ? 1.5 : 1);
+      r.stepT += dt * r.lv.speed * (r.dashUntil > clock ? DASH : r.panic > 0 ? 1.5 : 1);
       while (r.stepT >= 1) {
         r.stepT -= 1;
         r.X0 += r.segDir * STEP;
@@ -471,10 +471,61 @@
           if (r.pause > 0) { r.stepT = 0; break; }
         }
       }
+      if (r.pause <= 0) avoidCamp(r);
       const t = r.stepT;
       r.X = r.X0 + r.segDir * STEP * (0.5 * t + 0.5 * t * t * (3 - 2 * t));
     }
     r.lean += (target - r.lean) * Math.min(1, dt * 12);
+  }
+
+  // If the aim has been parked for STILL_TIME, never step into it: turn away before the
+  // next step would bring his hitbox over that spot, or hurry out if he is already there.
+  // He starts steering AVOID_LEAD s early so he is already clear when the 1.5 s mark hits.
+  // A mid-stride turn restarts the step from where he stands, so he never jumps.
+  // Crossing to the inner side takes longer than a plain sidestep, so it may start earlier.
+  const AVOID_LEAD = 0.6, CROSS_LEAD = 1.0, DASH = 2.5; // DASH: speed multiplier while slipping past the spot
+  function avoidCamp(r) {
+    const held = clock - mouse.since;
+    if (state !== 'play' || r !== runner || r.state !== 'run' || held < STILL_TIME - CROSS_LEAD) return;
+    const { gy, S, d } = scr(r);
+    const ly = (mouse.ay - gy - jumpOff(r, S)) / S;
+    if (ly < -240 || ly > 25) return; // spot is well above/below him (the band reaches above his hat, since he rises as he recedes)
+    if (r.dashUntil > clock) return; // committed to dashing past the spot (pinned at the street edge)
+    // A fixed screen point sits further out in world X as he recedes (aX grows with depth),
+    // so a spot drifts toward the nearer street edge. Being on its outer side gets him cornered.
+    const aX = (mouse.ax - VX) * d, M = (42 + 4 / S) * U;
+    const gap = Math.abs(r.X - aX), inside = gap < M, away = r.X >= aX ? 1 : -1;
+    const moving = r.pause <= 0;
+    const room = (dir, from = r.X) => Math.floor((LIM - dir * from) / STEP + 1e-6);
+    const crossLen = Math.ceil((gap + M) / STEP) + 1;
+    const turn = () => { if (r.stepT > 0) { r.X0 = r.X; r.stepT = 0; } r.pause = 0; }; // turn mid-stride from where he stands
+    const outer = (away === Math.sign(aX) && Math.abs(aX) > 20) || room(away) < 3;
+    const squeeze = Math.abs((mouse.ax - VX) * depth(1)) + M > Math.abs(r.X); // the spot will reach him before the town limit
+    const crossT = crossLen / (r.lv.speed * DASH);
+    if (outer && (gap < M + 3 * STEP || squeeze) && room(-away) >= crossLen && (ly < -185 || held + crossT < STILL_TIME)) {
+      // He's between the spot and the edge it drifts toward: slip past it to the inner
+      // side now (ideally while it is still above his hat), before he gets cornered.
+      turn();
+      r.segDir = -away; r.stepsLeft = crossLen; r.panic = Math.max(r.panic, 0.5);
+      r.dashUntil = clock + crossT;
+      return;
+    }
+    if (held < STILL_TIME - AVOID_LEAD) return;
+    const need = Math.ceil((M - gap) / STEP) + 1; // steps to get clear
+    if (inside && moving && r.segDir === away) { // already escaping: just make sure he goes far enough
+      r.stepsLeft = Math.max(r.stepsLeft, need); r.panic = Math.max(r.panic, 0.5); return;
+    }
+    if (!inside && (!moving || Math.abs(r.X0 + r.segDir * STEP - aX) >= M)) return; // current step stays clear
+    turn();
+    if (room(away) >= 1) {
+      r.segDir = away;
+      r.stepsLeft = Math.min(room(away), inside ? need + rint(0, 1) : rint(1, 3));
+    } else if (inside) { // pinned against the edge with the spot on him: dash through it
+      r.segDir = -away;
+      r.stepsLeft = Math.min(room(-away), crossLen);
+      r.dashUntil = clock + r.stepsLeft / (r.lv.speed * DASH);
+    } else { r.pause = 0.15; return; } // pinned and clear: hold here
+    if (inside) r.panic = Math.max(r.panic, 0.5);
   }
 
   function hitTest(r, px, py) {
@@ -588,7 +639,6 @@
     if (reloading > 0) return;
     if (ammo <= 0) { sfx.empty(); startReload(); return; }
     ammo--; levelShots++;
-    const cold = stillness() >= 1;
     const color = PAINTS[shotNo++ % PAINTS.length];
     sfx.shot();
     shake = 6; flashT = 0.07; recoil = 1;
@@ -599,15 +649,9 @@
     const inRect = (c) => c.rect && x >= c.rect.x && x <= c.rect.x + c.rect.w && y >= c.rect.y && y <= c.rect.y + c.rect.h;
     const rd = depth(runner.z);
     const front = covers.some((c) => c.d < rd && inRect(c));
-    const where = front || cold ? null : hitTest(runner, x, y);
+    const where = front ? null : hitTest(runner, x, y);
 
-    if (cold) {
-      streak = 0;
-      puff(x, y, 6, '#bfe8ff', 0.7);
-      addFloat(coldWarned ? 'COLD AIM' : 'COLD AIM: keep your aim moving!', x, y - 18, '#8fd8ff', coldWarned ? 16 : 18);
-      coldWarned = true;
-      runner.say = pick(['Camping? Ha!', 'Saw that coming!', 'Too obvious!', 'Wake up!']); runner.sayT = 0.9;
-    } else if (where) {
+    if (where) {
       const head = where === 'head', far = runner.z > 0.6;
       const { sx, gy, S } = scr(runner);
       levelHits++; streak++;
@@ -1027,26 +1071,17 @@
 
   function drawCrosshair() {
     if (!mouse.show) return;
-    const { x, y } = mouse, playing = state === 'play';
-    const st = playing ? stillness() : 0, cold = st >= 1, hot = playing && reloading <= 0 && !cold;
-    const col = cold ? '#8fd8ff' : hot ? '#ff4040' : '#fff';
+    const { x, y } = mouse, hot = state === 'play' && reloading <= 0;
     const gap = 7 + recoil * 8;
     ctx.lineCap = 'round';
     for (let pass = 0; pass < 2; pass++) {
-      ctx.strokeStyle = pass ? col : 'rgba(10,4,16,0.65)';
+      ctx.strokeStyle = pass ? (hot ? '#ff4040' : '#fff') : 'rgba(10,4,16,0.65)';
       ctx.lineWidth = pass ? 2 : 5;
       ctx.beginPath(); ctx.arc(x, y, 15 + recoil * 6, 0, Math.PI * 2); ctx.stroke();
       line(x - 24 - recoil * 8, y, x - gap, y); line(x + gap, y, x + 24 + recoil * 8, y);
       line(x, y - 24 - recoil * 8, x, y - gap); line(x, y + gap, x, y + 24 + recoil * 8);
     }
-    // Cold-down meter: a frost arc fills once the aim has been still for a third of STILL_TIME.
-    const f = (st - 0.33) / 0.67;
-    if (f > 0) {
-      ctx.strokeStyle = '#8fd8ff'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(x, y, 21, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, f)); ctx.stroke();
-    }
-    if (cold) txt('MOVE!', x, y + 42, 13, '#8fd8ff', 'center', false);
-    ctx.fillStyle = col; circle(x, y, 1.8);
+    ctx.fillStyle = hot ? '#ff4040' : '#fff'; circle(x, y, 1.8);
   }
 
   function draw() {

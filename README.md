@@ -24,8 +24,8 @@ system serif when offline).
 - 3 lives. An escape costs one and the level restarts.
 - Headshots do double damage and score more. Consecutive hits build a streak multiplier,
   and long-distance hits score x1.5.
-- No camping: if your aim stays within a few pixels for 1.5 s, the crosshair frosts over
-  (a blue arc warns you first) and shots from it miss. Keep tracking him.
+- No camping: if your aim stays within a few pixels for 1.5 s, the bandit quietly steers
+  around that spot (no on-screen hint). Tune with `STILL_R` / `STILL_TIME` in `game.js`.
 - Crates and barrels block shots only while he is behind them.
 - Bonus points for accuracy and for catching him early.
 - 10 levels add speed, cover, multi-hit vests, jumps/ducks, stutter-steps, a head start
