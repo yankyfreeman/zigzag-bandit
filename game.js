@@ -100,6 +100,14 @@
       src.start();
     } catch (e) { /* audio unavailable */ }
   }
+  // ---------- Analytics (GoatCounter events; no-op if the script isn't loaded) ----------
+  const reported = new Set();
+  function track(name) {
+    if (reported.has(name)) return;           // once per page load per event
+    reported.add(name);
+    try { if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: name, title: name, event: true }); } catch (e) { /* ignore */ }
+  }
+
   const sfx = {
     shot() { noise(0.16, 0.32); tone(190, 0.12, 'square', 0.1, 55); },
     hit() { tone(520, 0.12, 'triangle', 0.2, 880); },
@@ -480,6 +488,7 @@
 
   function startLevel() {
     lv = getLevel(levelIdx);
+    track(levelIdx === 0 ? 'game-start' : 'reached-level-' + (levelIdx + 1));
     runner = makeRunner(lv);
     covers = [];
     const zMin = Math.max(0.1, (lv.start || 0) + 0.08), zSpan = 0.72 - zMin;
@@ -528,7 +537,7 @@
     runner.say = pick(['So long!', 'Bye bye!', 'Catch you never!', 'Ha ha ha!']);
     runner.sayT = 2;
     saveBest();
-    if (lives <= 0) { sfx.over(); state = 'over'; } else { sfx.escape(); result = { win: false }; state = 'result'; }
+    if (lives <= 0) { sfx.over(); state = 'over'; track('game-over-level-' + (levelIdx + 1)); } else { sfx.escape(); result = { win: false }; state = 'result'; }
     stateT = 0;
   }
 
