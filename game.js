@@ -133,7 +133,15 @@
   let particles = [], decals = [], floats = [], tracer = null;
   let result = null;
   let shake = 0, flashT = 0, recoil = 0;
-  const mouse = { x: W / 2, y: H * 0.55, show: false };
+  const mouse = { x: W / 2, y: H * 0.55, show: false, ax: W / 2, ay: H * 0.55, since: 0 };
+  // Anti-camping: an aim held within STILL_R px for STILL_TIME s goes "cold" and its shots miss.
+  const STILL_R = 14, STILL_TIME = 1.5;
+  function aimAt(x, y) {
+    if (Math.hypot(x - mouse.ax, y - mouse.ay) > STILL_R) { mouse.ax = x; mouse.ay = y; mouse.since = clock; }
+    mouse.x = x; mouse.y = y;
+  }
+  const stillness = () => Math.min(1, (clock - mouse.since) / STILL_TIME);
+  let coldWarned = false;
   const motes = Array.from({ length: 36 }, () => ({ x: rand(0, W), y: rand(120, H), vx: rand(-14, 14), vy: rand(-8, 4), r: rand(0.8, 2.2) }));
 
   // ---------- Static scenery (rendered once to an offscreen canvas) ----------
@@ -580,6 +588,7 @@
     if (reloading > 0) return;
     if (ammo <= 0) { sfx.empty(); startReload(); return; }
     ammo--; levelShots++;
+    const cold = stillness() >= 1;
     const color = PAINTS[shotNo++ % PAINTS.length];
     sfx.shot();
     shake = 6; flashT = 0.07; recoil = 1;
@@ -590,9 +599,15 @@
     const inRect = (c) => c.rect && x >= c.rect.x && x <= c.rect.x + c.rect.w && y >= c.rect.y && y <= c.rect.y + c.rect.h;
     const rd = depth(runner.z);
     const front = covers.some((c) => c.d < rd && inRect(c));
-    const where = front ? null : hitTest(runner, x, y);
+    const where = front || cold ? null : hitTest(runner, x, y);
 
-    if (where) {
+    if (cold) {
+      streak = 0;
+      puff(x, y, 6, '#bfe8ff', 0.7);
+      addFloat(coldWarned ? 'COLD AIM' : 'COLD AIM: keep your aim moving!', x, y - 18, '#8fd8ff', coldWarned ? 16 : 18);
+      coldWarned = true;
+      runner.say = pick(['Camping? Ha!', 'Saw that coming!', 'Too obvious!', 'Wake up!']); runner.sayT = 0.9;
+    } else if (where) {
       const head = where === 'head', far = runner.z > 0.6;
       const { sx, gy, S } = scr(runner);
       levelHits++; streak++;
@@ -636,7 +651,7 @@
 
   canvas.addEventListener('pointermove', (e) => {
     const p = toGame(e);
-    mouse.x = p.x; mouse.y = p.y; mouse.show = e.pointerType === 'mouse';
+    aimAt(p.x, p.y); mouse.show = e.pointerType === 'mouse';
   });
   canvas.addEventListener('pointerleave', () => { mouse.show = false; });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -644,7 +659,7 @@
   canvas.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     const p = toGame(e);
-    mouse.x = p.x; mouse.y = p.y; mouse.show = e.pointerType === 'mouse';
+    aimAt(p.x, p.y); mouse.show = e.pointerType === 'mouse';
     try { audio(); } catch (err) { /* audio unavailable */ }
     if (paused) { paused = false; return; }
     if (e.button === 2) { startReload(); return; }
@@ -1012,17 +1027,26 @@
 
   function drawCrosshair() {
     if (!mouse.show) return;
-    const { x, y } = mouse, hot = state === 'play' && reloading <= 0;
+    const { x, y } = mouse, playing = state === 'play';
+    const st = playing ? stillness() : 0, cold = st >= 1, hot = playing && reloading <= 0 && !cold;
+    const col = cold ? '#8fd8ff' : hot ? '#ff4040' : '#fff';
     const gap = 7 + recoil * 8;
     ctx.lineCap = 'round';
     for (let pass = 0; pass < 2; pass++) {
-      ctx.strokeStyle = pass ? (hot ? '#ff4040' : '#fff') : 'rgba(10,4,16,0.65)';
+      ctx.strokeStyle = pass ? col : 'rgba(10,4,16,0.65)';
       ctx.lineWidth = pass ? 2 : 5;
       ctx.beginPath(); ctx.arc(x, y, 15 + recoil * 6, 0, Math.PI * 2); ctx.stroke();
       line(x - 24 - recoil * 8, y, x - gap, y); line(x + gap, y, x + 24 + recoil * 8, y);
       line(x, y - 24 - recoil * 8, x, y - gap); line(x, y + gap, x, y + 24 + recoil * 8);
     }
-    ctx.fillStyle = hot ? '#ff4040' : '#fff'; circle(x, y, 1.8);
+    // Cold-down meter: a frost arc fills once the aim has been still for a third of STILL_TIME.
+    const f = (st - 0.33) / 0.67;
+    if (f > 0) {
+      ctx.strokeStyle = '#8fd8ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, 21, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, f)); ctx.stroke();
+    }
+    if (cold) txt('MOVE!', x, y + 42, 13, '#8fd8ff', 'center', false);
+    ctx.fillStyle = col; circle(x, y, 1.8);
   }
 
   function draw() {
@@ -1089,7 +1113,7 @@
 
   // Read-only hook for automated tests.
   window.zigzag = {
-    get state() { return state; }, get runner() { return runner; }, get score() { return score; }, get level() { return levelIdx + 1; },
+    get state() { return state; }, get runner() { return runner; }, get score() { return score; }, get level() { return levelIdx + 1; }, get stillness() { return stillness(); }, wouldHit(x, y) { return hitTest(runner, x, y); },
     aim(part) { const { sx, gy, S } = scr(runner), hF = ducking(runner) ? 0.62 : 1; return { x: sx, y: gy + jumpOff(runner, S) - (part === 'head' ? 138 : 90) * S * hF }; },
   };
 })();
