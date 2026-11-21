@@ -13,7 +13,6 @@ system serif when offline).
 | Input | Action |
 | --- | --- |
 | Click / tap | Shoot |
-| R, Space, right-click | Reload (6 shots per clip, auto-reloads when empty) |
 | P / Esc | Pause |
 | M | Mute |
 
@@ -21,6 +20,9 @@ system serif when offline).
 
 - Each round lasts roughly 11–15 seconds: stop the bandit or he reaches the town limit.
   The further he gets, the smaller the target.
+- Limited bullets, no reloads: 6 per round early on, 7–8 on multi-hit levels. Run out and he
+  gets away.
+- The hitbox matches his head, torso and legs (the loot sack does not count), so aim carefully.
 - 3 lives. An escape costs one and the level restarts.
 - Headshots do double damage and score more. Consecutive hits build a streak multiplier,
   and long-distance hits score x1.5.

@@ -7,7 +7,7 @@
   const HORIZON = 200, CAM = 270, VX = W / 2, D0 = 1, D1 = 3.0, F = 400, END = 3.35, GATE = 3.2;
   const WALL = 470, ROAD = 330, PORCH = 352;      // world x of building walls / road edge / porch posts
   const LIM = 285, STEP = 36, U = 0.95;           // runner lateral limit, step length, sprite scale
-  const CLIP = 6, RELOAD_TIME = 0.8, JUMP = 0.5, MAX_LIVES = 3;
+  const JUMP = 0.5, MAX_LIVES = 3, OUT_DELAY = 0.7; // OUT_DELAY: pause after the last bullet misses before he gets away
   const BEST_KEY = 'zigzag-bandit-best';
   const TITLE_FONT = '"Rye", "Rockwell", Georgia, serif';
   const UI_FONT = '"Trebuchet MS", "Segoe UI", sans-serif';
@@ -45,18 +45,18 @@
   // time = seconds until he reaches the town limit, speed = sideways steps per second,
   // start = head start (0..1 of the street), jump/feint = chance per direction change.
   const LEVELS = [
-    { name: 'Warm-up',        tip: 'Click to shoot. Stop him before the town limit!', time: 15,   speed: 3.2, hp: 1, cover: 0, jump: 0,    feint: 0 },
-    { name: 'Quick Feet',     tip: 'He found his running shoes.',                    time: 13.5, speed: 4.4, hp: 1, cover: 0, jump: 0,    feint: 0 },
-    { name: 'Crate Yard',     tip: 'Crates in front of him block your shots.',       time: 13.5, speed: 4.6, hp: 1, cover: 3, jump: 0,    feint: 0 },
-    { name: 'Padded Vest',    tip: 'Takes 2 hits. A headshot counts double.',        time: 13,   speed: 4.8, hp: 2, cover: 2, jump: 0,    feint: 0 },
-    { name: 'Jumping Jack',   tip: 'Now he jumps and ducks.',                        time: 12.5, speed: 5.2, hp: 2, cover: 3, jump: 0.4,  feint: 0, tall: true },
-    { name: 'Fake Out',       tip: 'Watch for the stutter-step.',                    time: 12,   speed: 5.6, hp: 2, cover: 3, jump: 0.25, feint: 0.4, tall: true },
-    { name: 'Head Start',     tip: 'He is already halfway down the street.',         time: 11,   speed: 5.6, hp: 2, cover: 3, jump: 0.25, feint: 0.3, tall: true, start: 0.3 },
-    { name: 'Dust Storm',     tip: 'Shoot through the dust.',                        time: 12,   speed: 6.0, hp: 2, cover: 2, jump: 0.3,  feint: 0.3, tall: true, dust: true },
-    { name: 'Triple Padding', tip: '3 hits to stop him. Aim for the head.',          time: 12,   speed: 6.4, hp: 3, cover: 4, jump: 0.3,  feint: 0.35, tall: true },
-    { name: 'The Ghost',      tip: 'Everything at once. Good luck.',                 time: 11,   speed: 7.2, hp: 3, cover: 4, jump: 0.4,  feint: 0.45, tall: true, dust: true, start: 0.15 },
+    { name: 'Warm-up',        tip: 'Click to shoot. Stop him before the town limit!', time: 15,   speed: 3.2, hp: 1, ammo: 6, cover: 0, jump: 0,    feint: 0 },
+    { name: 'Quick Feet',     tip: 'He found his running shoes.',                    time: 13.5, speed: 4.4, hp: 1, ammo: 6, cover: 0, jump: 0,    feint: 0 },
+    { name: 'Crate Yard',     tip: 'Crates in front of him block your shots.',       time: 13.5, speed: 4.6, hp: 1, ammo: 6, cover: 3, jump: 0,    feint: 0 },
+    { name: 'Padded Vest',    tip: 'Takes 2 hits. A headshot counts double.',        time: 13,   speed: 4.8, hp: 2, ammo: 7, cover: 2, jump: 0,    feint: 0 },
+    { name: 'Jumping Jack',   tip: 'Now he jumps and ducks.',                        time: 12.5, speed: 5.2, hp: 2, ammo: 7, cover: 3, jump: 0.4,  feint: 0, tall: true },
+    { name: 'Fake Out',       tip: 'Watch for the stutter-step.',                    time: 12,   speed: 5.6, hp: 2, ammo: 7, cover: 3, jump: 0.25, feint: 0.4, tall: true },
+    { name: 'Head Start',     tip: 'He is already halfway down the street.',         time: 11,   speed: 5.6, hp: 2, ammo: 6, cover: 3, jump: 0.25, feint: 0.3, tall: true, start: 0.3 },
+    { name: 'Dust Storm',     tip: 'Shoot through the dust.',                        time: 12,   speed: 6.0, hp: 2, ammo: 7, cover: 2, jump: 0.3,  feint: 0.3, tall: true, dust: true },
+    { name: 'Triple Padding', tip: '3 hits to stop him. Aim for the head.',          time: 12,   speed: 6.4, hp: 3, ammo: 8, cover: 4, jump: 0.3,  feint: 0.35, tall: true },
+    { name: 'The Ghost',      tip: 'Everything at once. Good luck.',                 time: 11,   speed: 7.2, hp: 3, ammo: 7, cover: 4, jump: 0.4,  feint: 0.45, tall: true, dust: true, start: 0.15 },
   ];
-  const DEMO = { time: 9, speed: 4.5, hp: 1, cover: 0, jump: 0.2, feint: 0.1 };
+  const DEMO = { time: 9, speed: 4.5, hp: 1, ammo: 6, cover: 0, jump: 0.2, feint: 0.1 };
 
   function getLevel(i) {
     if (i < LEVELS.length) return LEVELS[i];
@@ -114,7 +114,6 @@
     head() { tone(660, 0.08, 'triangle', 0.2); tone(990, 0.14, 'triangle', 0.2, 0, 0.07); },
     block() { tone(130, 0.08, 'square', 0.15, 80); },
     empty() { tone(900, 0.03, 'square', 0.08); },
-    reload() { tone(300, 0.04, 'square', 0.08); tone(450, 0.05, 'square', 0.08, 0, RELOAD_TIME - 0.1); },
     win() { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.16, 'triangle', 0.18, 0, i * 0.09)); },
     escape() { tone(420, 0.5, 'sawtooth', 0.12, 140); },
     over() { [392, 330, 262, 196].forEach((f, i) => tone(f, 0.25, 'triangle', 0.18, 0, i * 0.18)); },
@@ -127,7 +126,7 @@
   let score = 0, lives = MAX_LIVES, streak = 0, shotNo = 0;
   let best = 0;
   try { best = parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { /* no storage */ }
-  let ammo = CLIP, reloading = 0;
+  let ammo = 0, outT = 0; // bullets left this round (no reloads); countdown once they run out
   let levelShots = 0, levelHits = 0;
   let runner = null, covers = [], clouds = [];
   let particles = [], decals = [], floats = [], tracer = null;
@@ -529,12 +528,13 @@
   }
 
   function hitTest(r, px, py) {
-    const { sx, gy, S } = scr(r), hF = ducking(r) ? 0.62 : 1, slack = 2.5 / S;
+    const { sx, gy, S } = scr(r), hF = ducking(r) ? 0.62 : 1;
     const lx = (px - sx) / S, ly = (py - gy - jumpOff(r, S)) / (S * hF);
-    if (Math.hypot(lx, ly + 138) <= 17 + slack) return 'head';
-    if (!r.hatOff && Math.abs(lx) <= 15 + slack && ly < -138 && ly >= -162 - slack) return 'head';
-    if (lx >= -27 - slack && lx <= 33 + slack && ly >= -122 && ly <= -58) return 'body';
-    if (Math.abs(lx) <= 19 + slack && ly > -58 && ly <= 2 + slack) return 'body';
+    // Tight hitbox, matched to the drawing: head r13 at -133, hat crown, torso, legs. The loot sack doesn't count.
+    if (Math.hypot(lx, ly + 133) <= 13) return 'head';
+    if (!r.hatOff && Math.abs(lx) <= 13 && ly < -140 && ly >= -162) return 'head';
+    if (Math.abs(lx) <= 21 && ly >= -120 && ly <= -60) return 'body';
+    if (Math.abs(lx) <= 14 && ly > -60 && ly <= 0) return 'body';
     return null;
   }
 
@@ -559,7 +559,7 @@
     }
     clouds = [];
     if (lv.dust) for (let i = 0; i < 7; i++) clouds.push({ x: rand(0, W), y: rand(HORIZON + 30, 430), r: rand(80, 150), vx: rand(25, 70) * (i % 2 ? 1 : -1) });
-    ammo = CLIP; reloading = 0;
+    ammo = lv.ammo; outT = 0;
     levelShots = 0; levelHits = 0;
     result = null; tracer = null;
     state = 'intro'; stateT = 0;
@@ -589,11 +589,11 @@
     state = 'result'; stateT = 0;
   }
 
-  function escaped() {
+  function escaped(dry) {
     lives--;
     streak = 0;
     runner.state = 'flee';
-    runner.say = pick(['So long!', 'Bye bye!', 'Catch you never!', 'Ha ha ha!']);
+    runner.say = dry ? pick(['Out of paint? Ha!', 'Click click!', 'Empty, partner?']) : pick(['So long!', 'Bye bye!', 'Catch you never!', 'Ha ha ha!']);
     runner.sayT = 2;
     saveBest();
     if (lives <= 0) { sfx.over(); state = 'over'; track('game-over-level-' + (levelIdx + 1)); } else { sfx.escape(); result = { win: false }; state = 'result'; }
@@ -606,11 +606,6 @@
   }
 
   // ---------- Shooting ----------
-  function startReload() {
-    if (reloading > 0 || ammo === CLIP || state !== 'play') return;
-    reloading = RELOAD_TIME;
-    sfx.reload();
-  }
 
   function puff(x, y, n, color, k = 1) {
     for (let i = 0; i < n; i++) particles.push({ x, y, vx: rand(-90, 90) * k, vy: rand(-130, -20) * k, life: rand(0.25, 0.5), color, size: rand(2, 4) * k + 0.6, grav: 320 * k });
@@ -636,8 +631,7 @@
   }
 
   function shoot(x, y) {
-    if (reloading > 0) return;
-    if (ammo <= 0) { sfx.empty(); startReload(); return; }
+    if (ammo <= 0) { sfx.empty(); return; }
     ammo--; levelShots++;
     const color = PAINTS[shotNo++ % PAINTS.length];
     sfx.shot();
@@ -684,7 +678,7 @@
       puff(x, y, 5, color, 0.7);
       if (Math.random() < 0.3) { runner.say = pick(['Ha! Missed!', 'Too slow!', 'Nope!', 'Over here!', 'Nice try!', 'Whoosh!']); runner.sayT = 0.9; }
     }
-    if (ammo <= 0 && state === 'play') startReload();
+    if (ammo <= 0 && runner.state === 'run') outT = OUT_DELAY;
   }
 
   // ---------- Input ----------
@@ -706,7 +700,7 @@
     aimAt(p.x, p.y); mouse.show = e.pointerType === 'mouse';
     try { audio(); } catch (err) { /* audio unavailable */ }
     if (paused) { paused = false; return; }
-    if (e.button === 2) { startReload(); return; }
+    if (e.button === 2) return;
     if (state === 'menu') startGame();
     else if (state === 'intro') { if (stateT > 0.4) { state = 'play'; stateT = 0; } }
     else if (state === 'play') shoot(p.x, p.y);
@@ -722,8 +716,7 @@
 
   window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
-    if (k === 'r' || k === ' ') { e.preventDefault(); startReload(); }
-    else if (k === 'm') setMuted(!muted);
+    if (k === 'm') setMuted(!muted);
     else if (k === 'p' || k === 'escape') { if (state === 'play' || paused) paused = !paused; }
     else if (k === 'enter') {
       if (state === 'menu') startGame();
@@ -764,9 +757,9 @@
       updateRunner(runner, dt, false);
       if (stateT > 2.2) { state = 'play'; stateT = 0; }
     } else if (state === 'play') {
-      if (reloading > 0) { reloading -= dt; if (reloading <= 0) { reloading = 0; ammo = CLIP; } }
       updateRunner(runner, dt, true);
       if (runner.z >= 1) escaped();
+      else if (outT > 0 && (outT -= dt) <= 0) escaped(true);
     } else {
       updateRunner(runner, dt, true);
     }
@@ -990,20 +983,13 @@
     txt('ESCAPE', bx + bw + 12, by + 1, 11, p > 0.75 ? '#ff8f8f' : '#fff', 'left', false);
 
     // cartridges
-    pill(12, H - 54, reloading > 0 || ammo < CLIP ? 300 : 128, 42, 'rgba(22,10,30,0.5)');
-    for (let i = 0; i < CLIP; i++) {
+    pill(12, H - 54, 34 + lv.ammo * 17, 42, 'rgba(22,10,30,0.5)');
+    for (let i = 0; i < lv.ammo; i++) {
       const x = 28 + i * 17, y = H - 46, on = i < ammo;
       ctx.fillStyle = on ? '#d9a441' : 'rgba(255,255,255,0.13)';
       ctx.beginPath(); ctx.roundRect(x, y + 8, 11, 18, 2); ctx.fill();
       ctx.fillStyle = on ? PAINTS[(shotNo + (ammo - 1 - i)) % PAINTS.length] : 'rgba(255,255,255,0.13)';
       ctx.beginPath(); ctx.roundRect(x, y, 11, 11, [5.5, 5.5, 0, 0]); ctx.fill();
-    }
-    if (reloading > 0) {
-      txt('RELOADING', 142, H - 39, 13, '#fff', 'left', false);
-      pill(142, H - 27, 150, 5, 'rgba(255,255,255,0.18)');
-      pill(142, H - 27, Math.max(5, 150 * (1 - reloading / RELOAD_TIME)), 5, '#ffd23f');
-    } else if (ammo < CLIP) {
-      txt('R / right-click: reload', 142, H - 33, 12, 'rgba(255,255,255,0.8)', 'left', false);
     }
   }
 
@@ -1031,12 +1017,13 @@
       txt('He runs for the town limit and never in a straight line.', W / 2, 172, 19, '#fff');
       blink('CLICK TO START', 440);
       if (best > 0) txt('BEST ' + best, W / 2, 470, 14, '#ffd9a0');
-      txt('Click: shoot   ·   R / Space / right-click: reload   ·   P: pause   ·   M: mute', W / 2, H - 20, 12, 'rgba(255,255,255,0.85)');
+      txt('Click: shoot   ·   limited bullets, no reloads   ·   P: pause   ·   M: mute', W / 2, H - 20, 12, 'rgba(255,255,255,0.85)');
     } else if (state === 'intro') {
       panel(540, 176);
       txt(`LEVEL ${levelIdx + 1}`, W / 2, H / 2 - 54, 16, '#ffd9a0', 'center', false);
       title(lv.name, W / 2, H / 2 - 10, 42);
-      txt(lv.tip, W / 2, H / 2 + 46, 16, '#fff', 'center', false);
+      txt(lv.tip, W / 2, H / 2 + 42, 16, '#fff', 'center', false);
+      txt(`${lv.ammo} bullets · no reloads`, W / 2, H / 2 + 68, 14, '#ffd23f', 'center', false);
     } else if (state === 'play' && stateT < 0.6) {
       ctx.globalAlpha = 1 - stateT / 0.6;
       title('GO!', W / 2, H / 2 - 60, 90 + stateT * 40);
@@ -1071,7 +1058,7 @@
 
   function drawCrosshair() {
     if (!mouse.show) return;
-    const { x, y } = mouse, hot = state === 'play' && reloading <= 0;
+    const { x, y } = mouse, hot = state === 'play' && ammo > 0;
     const gap = 7 + recoil * 8;
     ctx.lineCap = 'round';
     for (let pass = 0; pass < 2; pass++) {
@@ -1148,7 +1135,7 @@
 
   // Read-only hook for automated tests.
   window.zigzag = {
-    get state() { return state; }, get runner() { return runner; }, get score() { return score; }, get level() { return levelIdx + 1; }, get stillness() { return stillness(); }, wouldHit(x, y) { return hitTest(runner, x, y); },
-    aim(part) { const { sx, gy, S } = scr(runner), hF = ducking(runner) ? 0.62 : 1; return { x: sx, y: gy + jumpOff(runner, S) - (part === 'head' ? 138 : 90) * S * hF }; },
+    get state() { return state; }, get runner() { return runner; }, get score() { return score; }, get level() { return levelIdx + 1; }, get stillness() { return stillness(); }, get ammo() { return ammo; }, get lives() { return lives; }, wouldHit(x, y) { return hitTest(runner, x, y); },
+    aim(part) { const { sx, gy, S } = scr(runner), hF = ducking(runner) ? 0.62 : 1; return { x: sx, y: gy + jumpOff(runner, S) - (part === 'head' ? 133 : 90) * S * hF }; },
   };
 })();
